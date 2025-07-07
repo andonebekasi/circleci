@@ -1,0 +1,47 @@
+version: 2.1
+
+orbs:
+  node: circleci/node@5.1.0
+  azure-cli: circleci/azure-cli@1.2.0
+
+jobs:
+  deploy:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+
+      - node/install:
+          node-version: '18'
+
+      - run:
+          name: Install dependencies
+          command: npm install
+
+      - azure-cli/install
+
+      - run:
+          name: Azure CLI Login
+          command: |
+            echo "$AZURE_CREDENTIALS" > azure-credentials.json
+            az login --service-principal \
+              --username $(jq -r .clientId azure-credentials.json) \
+              --password $(jq -r .clientSecret azure-credentials.json) \
+              --tenant $(jq -r .tenantId azure-credentials.json)
+
+      - run:
+          name: Zip application
+          command: zip -r app.zip .
+
+      - run:
+          name: Deploy to Azure Web App
+          command: |
+            az webapp deployment source config-zip \
+              --resource-group $AZURE_RESOURCE_GROUP \
+              --name $AZURE_WEBAPP_NAME \
+              --src app.zip
+
+workflows:
+  deploy_app:
+    jobs:
+      - deploy
